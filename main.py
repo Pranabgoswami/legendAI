@@ -140,5 +140,11 @@ async def on_member_join(member):
         except Exception as e:
             print("❌ Auto-ban failed:", e)
 
+#===============autoping===========================
+@bot.event
+async def on_message(message):
+    if message.channel.id == YOUR_CHANNEL_ID:
+        await message.channel.send("@🔮crystal")
+
 # ================= RUN BOT =================
 bot.run(TOKEN)
