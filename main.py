@@ -143,7 +143,7 @@ async def on_member_join(member):
 #===============autoping===========================
 @bot.event
 async def on_message(message):
-    if message.channel.id == YOUR_CHANNEL_ID:
+    if message.channel.id == 1458400694682783775:
         await message.channel.send("@🔮crystal")
 
 # ================= RUN BOT =================
