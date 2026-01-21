@@ -145,44 +145,51 @@ async def on_member_join(member):
         except Exception as e:
             print("❌ Auto-ban failed:", e)
 
-#===============autoping===========================
-# =============== AUTO PING (FIXED – SINGLE PING ONLY) ==================
+# =============== AUTO PING (FINAL – WITH BOT IGNORE) ==================
 
 TARGET_CHANNEL_ID = 1458400694682783775
 CRYSTAL_ROLE_ID = 1458400797133115474
 
-# store processed message IDs
-processed_messages = set()
+IGNORED_BOT_ID = 1460114117783195841  # 🚫 bot to ignore
+
+ping_allowed = True
 
 @bot.event
 async def on_message(message):
+    global ping_allowed
 
-    # ❌ ignore bot messages
+    # ❌ ignore ALL bots
     if message.author.bot:
+        return
+
+    # ❌ ignore SPECIFIC bot by ID (extra safety)
+    if message.author.id == IGNORED_BOT_ID:
         return
 
     # ❌ only target channel
     if message.channel.id != TARGET_CHANNEL_ID:
         return
 
-    # ❌ prevent duplicate triggers (THIS IS THE KEY)
-    if message.id in processed_messages:
-        return
-
-    # ❌ ignore replies (prevents echo loops)
-    if message.reference is not None:
-        return
-
-    # ✅ mark message as processed
-    processed_messages.add(message.id)
-
-    # 🔔 ping role ONCE
     role = message.guild.get_role(CRYSTAL_ROLE_ID)
-    if role:
-        await message.channel.send(
-            f"{role.mention} in discord, share todo list",
-            allowed_mentions=discord.AllowedMentions(roles=[role])
-        )
+    if not role:
+        return
+
+    # 🔁 if crystal sends message → reset
+    if role in message.author.roles:
+        ping_allowed = True
+        return
+
+    # 🔒 already pinged → do nothing
+    if not ping_allowed:
+        return
+
+    # ✅ first valid user message → ping once
+    await message.channel.send(
+        f"{role.mention} in discord, share todo list",
+        allowed_mentions=discord.AllowedMentions(roles=[role])
+    )
+
+    ping_allowed = False
 
     await bot.process_commands(message)
 
