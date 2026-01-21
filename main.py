@@ -4,6 +4,7 @@ from discord.ext import commands
 import json
 import os
 from dotenv import load_dotenv
+import time
 
 # ================= LOAD ENV =================
 load_dotenv()
@@ -19,6 +20,7 @@ REDLIST_FILE = "redlist.json"
 # ================= INTENTS =================
 intents = discord.Intents.default()
 intents.members = True
+intents.message_content = True
 
 bot = commands.Bot(command_prefix="!", intents=intents)
 
@@ -36,8 +38,11 @@ def save_redlist(data):
 # ================= READY =================
 @bot.event
 async def on_ready():
-    await bot.tree.sync(guild=discord.Object(id=GUILD_ID))
-    print(f"🔥 RedBan Bot logged in as {bot.user}")
+    try:
+        await bot.tree.sync(guild=discord.Object(id=GUILD_ID))
+        print(f"🔥 RedBan Bot logged in as {bot.user}. Commands synced.")
+    except discord.errors.Forbidden as e:
+        print(f"❌ Command sync failed: {e}. Check bot invite scopes (applications.commands required).")
 
 # ================= /REDBAN COMMAND =================
 @bot.tree.command(
@@ -141,10 +146,31 @@ async def on_member_join(member):
             print("❌ Auto-ban failed:", e)
 
 #===============autoping===========================
+TARGET_CHANNEL_ID = 1458400694682783775  # 🔁 replace with your channel ID if needed
+CRYSTAL_ROLE_ID = 1458400797133115474  # 🔁 replace with @crystal role ID
+# cooldown dictionary (channel-based)
+last_ping_time = {}
+COOLDOWN_SECONDS = 10  # 🔧 change if needed
 @bot.event
 async def on_message(message):
-    if message.channel.id == 1458400694682783775:
-        await message.channel.send("@🔮crystal")
+    # ❌ Ignore bot messages (MOST IMPORTANT)
+    if message.author.bot:
+        return
+    # ❌ Only trigger in the target channel
+    if message.channel.id != TARGET_CHANNEL_ID:
+        return
+    now = time.time()
+    # ⏱️ Cooldown check
+    last_time = last_ping_time.get(message.channel.id, 0)
+    if now - last_time < COOLDOWN_SECONDS:
+        return
+    # ✅ Update cooldown time
+    last_ping_time[message.channel.id] = now
+    # 🔔 Ping the role ONCE
+    role = message.guild.get_role(CRYSTAL_ROLE_ID)
+    if role:
+        await message.reply(f"{role.mention} in discord, share todo list")
+    await bot.process_commands(message)
 
 # ================= RUN BOT =================
 bot.run(TOKEN)
