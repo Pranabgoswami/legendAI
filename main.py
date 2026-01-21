@@ -11,7 +11,7 @@ TOKEN = os.getenv("DISCORD_TOKEN")
 GUILD_ID = int(os.getenv("GUILD_ID"))
 
 # ================= OWNER LOCK =================
-OWNER_ID = 1406313503278764174  # ONLY this ID can use /redban
+OWNER_ID = 1406313503278764174  # ONLY this ID can use /redban and /redlist
 
 # ================= FILE =================
 REDLIST_FILE = "redlist.json"
@@ -88,6 +88,46 @@ async def redban(interaction: discord.Interaction, userid: str):
     await interaction.response.send_message(
         f"🚫 User **{userid}** added to red list.\nAuto-ban enabled."
     )
+
+# ================= /REDLIST COMMAND =================
+@bot.tree.command(
+    name="redlist",
+    description="Owner-only: Show the IDs in the red list",
+    guild=discord.Object(id=GUILD_ID)
+)
+async def redlist_command(interaction: discord.Interaction):
+    # 🔒 OWNER CHECK
+    if interaction.user.id != OWNER_ID:
+        await interaction.response.send_message(
+            "❌ You are not authorized to use this command.",
+            ephemeral=True
+        )
+        return
+
+    redlist = load_redlist()
+
+    if not redlist:
+        await interaction.response.send_message(
+            "📋 The red list is currently empty.",
+            ephemeral=True
+        )
+        return
+
+    # Format the list nicely
+    formatted_list = "\n".join([f"- {user_id}" for user_id in redlist])
+    message = f"📋 Red List IDs:\n{formatted_list}"
+
+    # Split message if too long (Discord limit ~2000 chars)
+    if len(message) > 1900:
+        await interaction.response.send_message(
+            "📋 The red list is too long to display in one message. Check the file directly.",
+            ephemeral=True
+        )
+    else:
+        await interaction.response.send_message(
+            message,
+            ephemeral=True
+        )
 
 # ================= AUTO BAN ON JOIN =================
 @bot.event
