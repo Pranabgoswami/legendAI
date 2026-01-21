@@ -5,6 +5,7 @@ import json
 import os
 from dotenv import load_dotenv
 import time
+import asyncio
 
 # ================= LOAD ENV =================
 load_dotenv()
@@ -145,58 +146,37 @@ async def on_member_join(member):
         except Exception as e:
             print("❌ Auto-ban failed:", e)
 
-# =============== AUTO PING (FINAL – NO BOT PINGS EVER) ==================
-
-TARGET_CHANNEL_ID = 1458400694682783775
-CRYSTAL_ROLE_ID = 1458400797133115474
-
-ping_allowed = True  # global lock
-
+#===============autoping===========================
+TARGET_CHANNEL_ID = 1458400694682783775  # 🔁 replace with your channel ID if needed
+CRYSTAL_ROLE_ID = 1458400797133115474  # 🔁 replace with @crystal role ID
+# cooldown dictionary (channel-based)
+last_ping_time = {}
+COOLDOWN_SECONDS = 10  # 🔧 change if needed
+ping_lock = asyncio.Lock()  # Lock to prevent race conditions
 
 @bot.event
 async def on_message(message):
-    global ping_allowed
-
-    # ❌ Ignore ALL bots (no bot ping ever)
+    # ❌ Ignore bot messages (MOST IMPORTANT)
     if message.author.bot:
         return
-
-    # ❌ Ignore webhooks
-    if message.webhook_id is not None:
-        return
-
-    # ❌ Only target channel
+    # ❌ Only trigger in the target channel
     if message.channel.id != TARGET_CHANNEL_ID:
         return
-
+    
+    async with ping_lock:
+        now = time.time()
+        # ⏱️ Cooldown check
+        last_time = last_ping_time.get(message.channel.id, 0)
+        if now - last_time < COOLDOWN_SECONDS:
+            return
+        # ✅ Update cooldown time
+        last_ping_time[message.channel.id] = now
+    
+    # 🔔 Ping the role ONCE
     role = message.guild.get_role(CRYSTAL_ROLE_ID)
-    if role is None:
-        return
-
-    # 🔁 RESET when CRYSTAL role speaks
-    if role in message.author.roles:
-        ping_allowed = True
-        return
-
-    # 🔒 Already responded once
-    if not ping_allowed:
-        return
-
-    # 🔐 LOCK BEFORE SEND (prevents double response)
-    ping_allowed = False
-
-    # ✅ SINGLE RESPONSE (NO bot ping, only role)
-    await message.channel.send(
-        f"{role.mention} in discord, share todo list",
-        allowed_mentions=discord.AllowedMentions(roles=[role])
-    )
-
-    # ✅ IMPORTANT: allow commands to work
+    if role:
+        await message.reply(f"{role.mention} in discord, share todo list")
     await bot.process_commands(message)
-
-
-
-
 
 # ================= RUN BOT =================
 bot.run(TOKEN)
