@@ -145,25 +145,28 @@ async def on_member_join(member):
         except Exception as e:
             print("❌ Auto-ban failed:", e)
 
-# =============== AUTO PING (FINAL – WITH BOT IGNORE) ==================
+# =============== AUTO PING (ABSOLUTE SINGLE-PING FIX) ==================
 
 TARGET_CHANNEL_ID = 1458400694682783775
 CRYSTAL_ROLE_ID = 1458400797133115474
+IGNORED_BOT_ID = 1460114117783195841  # bot to ignore
 
-IGNORED_BOT_ID = 1460114117783195841  # 🚫 bot to ignore
-
-ping_allowed = True
+ping_allowed = True  # global state lock
 
 @bot.event
 async def on_message(message):
     global ping_allowed
 
-    # ❌ ignore ALL bots
+    # ❌ ignore all bots
     if message.author.bot:
         return
 
-    # ❌ ignore SPECIFIC bot by ID (extra safety)
+    # ❌ ignore specific bot ID
     if message.author.id == IGNORED_BOT_ID:
+        return
+
+    # ❌ ignore webhooks
+    if message.webhook_id is not None:
         return
 
     # ❌ only target channel
@@ -174,24 +177,25 @@ async def on_message(message):
     if not role:
         return
 
-    # 🔁 if crystal sends message → reset
+    # 🔁 RESET only when crystal speaks
     if role in message.author.roles:
         ping_allowed = True
         return
 
-    # 🔒 already pinged → do nothing
-    if not ping_allowed:
+    # 🔒 HARD LOCK — already pinged
+    if ping_allowed is False:
         return
 
-    # ✅ first valid user message → ping once
+    # ✅ FIRST VALID USER MESSAGE → PING ONCE
+    ping_allowed = False  # lock BEFORE sending (IMPORTANT)
+
     await message.channel.send(
         f"{role.mention} in discord, share todo list",
         allowed_mentions=discord.AllowedMentions(roles=[role])
     )
 
-    ping_allowed = False
+    return  # 🛑 HARD STOP — prevents second ping
 
-    await bot.process_commands(message)
 
 
 # ================= RUN BOT =================
