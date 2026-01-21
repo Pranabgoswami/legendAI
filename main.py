@@ -149,7 +149,7 @@ async def on_member_join(member):
 
 TARGET_CHANNEL_ID = 1458400694682783775
 CRYSTAL_ROLE_ID = 1458400797133115474
-IGNORED_BOT_ID = 1460114117783195841  # bot to ignore
+IGNORED_BOT_ID = 1460114117783195841  
 
 ping_allowed = True  # global state lock
 
