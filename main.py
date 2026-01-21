@@ -146,31 +146,46 @@ async def on_member_join(member):
             print("❌ Auto-ban failed:", e)
 
 #===============autoping===========================
-TARGET_CHANNEL_ID = 1458400694682783775  # 🔁 replace with your channel ID if needed
-CRYSTAL_ROLE_ID = 1458400797133115474  # 🔁 replace with @crystal role ID
-# cooldown dictionary (channel-based)
-last_ping_time = {}
-COOLDOWN_SECONDS = 10  # 🔧 change if needed
+# =============== AUTO PING (FIXED – SINGLE PING ONLY) ==================
+
+TARGET_CHANNEL_ID = 1458400694682783775
+CRYSTAL_ROLE_ID = 1458400797133115474
+
+# store processed message IDs
+processed_messages = set()
+
 @bot.event
 async def on_message(message):
-    # ❌ Ignore bot messages (MOST IMPORTANT)
+
+    # ❌ ignore bot messages
     if message.author.bot:
         return
-    # ❌ Only trigger in the target channel
+
+    # ❌ only target channel
     if message.channel.id != TARGET_CHANNEL_ID:
         return
-    now = time.time()
-    # ⏱️ Cooldown check
-    last_time = last_ping_time.get(message.channel.id, 0)
-    if now - last_time < COOLDOWN_SECONDS:
+
+    # ❌ prevent duplicate triggers (THIS IS THE KEY)
+    if message.id in processed_messages:
         return
-    # ✅ Update cooldown time
-    last_ping_time[message.channel.id] = now
-    # 🔔 Ping the role ONCE
+
+    # ❌ ignore replies (prevents echo loops)
+    if message.reference is not None:
+        return
+
+    # ✅ mark message as processed
+    processed_messages.add(message.id)
+
+    # 🔔 ping role ONCE
     role = message.guild.get_role(CRYSTAL_ROLE_ID)
     if role:
-        await message.reply(f"{role.mention} in discord, share todo list")
+        await message.channel.send(
+            f"{role.mention} in discord, share todo list",
+            allowed_mentions=discord.AllowedMentions(roles=[role])
+        )
+
     await bot.process_commands(message)
+
 
 # ================= RUN BOT =================
 bot.run(TOKEN)
