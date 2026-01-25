@@ -6,6 +6,7 @@ import os
 from dotenv import load_dotenv
 import time
 import asyncio
+from discord.ext import tasks
 
 # ================= LOAD ENV =================
 load_dotenv()
@@ -17,6 +18,9 @@ OWNER_ID = 1406313503278764174  # ONLY this ID can use /redban and /redlist
 
 # ================= FILE =================
 REDLIST_FILE = "redlist.json"
+TODO_CHANNEL_ID = 1458400694682783775   # channel where ping happens
+TODO_FILE = "todo_status.json"
+MEMBERS_FILE = "members.json"
 
 # ================= INTENTS =================
 intents = discord.Intents.default()
@@ -36,6 +40,22 @@ def save_redlist(data):
     with open(REDLIST_FILE, "w") as f:
         json.dump(data, f, indent=2)
 
+def load_todo():
+    if not os.path.exists(TODO_FILE):
+        return {}
+    with open(TODO_FILE, "r") as f:
+        return json.load(f)
+
+def save_todo(data):
+    with open(TODO_FILE, "w") as f:
+        json.dump(data, f, indent=2)
+
+def load_active_members():
+    if not os.path.exists(MEMBERS_FILE):
+        return []
+    with open(MEMBERS_FILE, "r") as f:
+        return json.load(f)
+
 # ================= READY =================
 @bot.event
 async def on_ready():
@@ -44,6 +64,8 @@ async def on_ready():
         print(f"🔥 RedBan Bot logged in as {bot.user}. Commands synced.")
     except discord.errors.Forbidden as e:
         print(f"❌ Command sync failed: {e}. Check bot invite scopes (applications.commands required).")
+    if not todo_ping_check.is_running():
+        todo_ping_check.start()
 
 # ================= /REDBAN COMMAND =================
 @bot.tree.command(
@@ -88,8 +110,12 @@ async def redban(interaction: discord.Interaction, userid: str):
             discord.Object(id=int(userid)),
             reason="Red List"
         )
-    except:
+    except discord.NotFound:
         pass  # user not in server yet
+    except discord.Forbidden as e:
+        print(f"❌ Ban failed (permissions): {e}")
+    except Exception as e:
+        print(f"❌ Unexpected ban error: {e}")
 
     await interaction.response.send_message(
         f"🚫 User **{userid}** added to red list.\nAuto-ban enabled."
@@ -146,37 +172,59 @@ async def on_member_join(member):
         except Exception as e:
             print("❌ Auto-ban failed:", e)
 
-#===============autoping===========================
-TARGET_CHANNEL_ID = 1458400694682783775  # 🔁 replace with your channel ID if needed
-CRYSTAL_ROLE_ID = 1458400797133115474  # 🔁 replace with @crystal role ID
-# cooldown dictionary (channel-based)
-last_ping_time = {}
-COOLDOWN_SECONDS = 10  # 🔧 change if needed
-ping_lock = asyncio.Lock()  # Lock to prevent race conditions
+class TodoModal(discord.ui.Modal, title="📝 Daily Todo Form"):
+    name = discord.ui.TextInput(label="Your Name", required=True)
+    date = discord.ui.TextInput(label="Date (DD/MM/YYYY)", required=True)
+    must_do = discord.ui.TextInput(label="Must Do", style=discord.TextStyle.paragraph)
+    can_do = discord.ui.TextInput(label="Can Do", style=discord.TextStyle.paragraph)
+    dont_do = discord.ui.TextInput(label="Don't Do", style=discord.TextStyle.paragraph)
 
-@bot.event
-async def on_message(message):
-    # ❌ Ignore bot messages (MOST IMPORTANT)
-    if message.author.bot:
+    async def on_submit(self, interaction: discord.Interaction):
+        data = load_todo()
+        data[str(interaction.user.id)] = int(time.time())
+        save_todo(data)
+
+        await interaction.response.send_message(
+            "✅ Todo submitted successfully.\n⏳ Ping timer reset.",
+            ephemeral=True
+        )
+
+@bot.tree.command(
+    name="todo",
+    description="Submit your daily todo",
+    guild=discord.Object(id=GUILD_ID)
+)
+async def todo(interaction: discord.Interaction):
+    if interaction.user.bot:
         return
-    # ❌ Only trigger in the target channel
-    if message.channel.id != TARGET_CHANNEL_ID:
+    await interaction.response.send_modal(TodoModal())
+
+@tasks.loop(hours=1)
+async def todo_ping_check():
+    if not bot.is_ready():
         return
-    
-    async with ping_lock:
-        now = time.time()
-        # ⏱️ Cooldown check
-        last_time = last_ping_time.get(message.channel.id, 0)
-        if now - last_time < COOLDOWN_SECONDS:
-            return
-        # ✅ Update cooldown time
-        last_ping_time[message.channel.id] = now
-    
-    # 🔔 Ping the role ONCE
-    role = message.guild.get_role(CRYSTAL_ROLE_ID)
-    if role:
-        await message.reply(f"{role.mention} in discord, share todo list")
-    await bot.process_commands(message)
+    channel = bot.get_channel(TODO_CHANNEL_ID)
+    if not channel:
+        return
+
+    data = load_todo()
+    active_members = load_active_members()
+    now = int(time.time())
+
+    for user_id in active_members:
+        member = channel.guild.get_member(int(user_id))
+
+        # User left server or is bot
+        if not member or member.bot:
+            continue
+
+        last_time = data.get(str(member.id), 0)
+
+        if now - last_time >= 86400:  # 24 hours
+            await channel.send(
+                f"{member.mention} ⏰ Please submit your `/todo`",
+                allowed_mentions=discord.AllowedMentions(users=[member])
+            )
 
 # ================= RUN BOT =================
 bot.run(TOKEN)
