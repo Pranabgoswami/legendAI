@@ -180,12 +180,62 @@ class TodoModal(discord.ui.Modal, title="📝 Daily Todo Form"):
     dont_do = discord.ui.TextInput(label="Don't Do", style=discord.TextStyle.paragraph)
 
     async def on_submit(self, interaction: discord.Interaction):
+
+        # 🔒 Allow only members from members.json
+        active_members = load_active_members()
+        if interaction.user.id not in active_members:
+            await interaction.response.send_message(
+                "❌ You are not allowed to submit TODOs.",
+                ephemeral=True
+            )
+            return
+
+        # ⏱ Save timestamp (for ping logic)
         data = load_todo()
         data[str(interaction.user.id)] = int(time.time())
         save_todo(data)
 
+        # 🎨 DECORATED MESSAGE TO SAME CHANNEL
+        embed = discord.Embed(
+            title="📥 New TODO Submitted",
+            color=discord.Color.blue()
+        )
+
+        embed.add_field(
+            name="👤 Submitted By",
+            value=f"{interaction.user.mention}\n`{interaction.user.id}`",
+            inline=False
+        )
+
+        embed.add_field(name="📅 Date", value=self.date.value, inline=True)
+        embed.add_field(name="📝 Name", value=self.name.value, inline=True)
+
+        embed.add_field(
+            name="✅ Must Do",
+            value=self.must_do.value or "N/A",
+            inline=False
+        )
+        embed.add_field(
+            name="➕ Can Do",
+            value=self.can_do.value or "N/A",
+            inline=False
+        )
+        embed.add_field(
+            name="🚫 Don't Do",
+            value=self.dont_do.value or "N/A",
+            inline=False
+        )
+
+        embed.set_footer(
+            text="Status: Pending • Active-members rule applied"
+        )
+
+        # 📢 SEND TO SAME CHANNEL
+        await interaction.channel.send(embed=embed)
+
+        # ✅ PRIVATE CONFIRMATION
         await interaction.response.send_message(
-            "✅ Todo submitted successfully.\n⏳ Ping timer reset.",
+            "✅ Your TODO has been submitted successfully!",
             ephemeral=True
         )
 
@@ -203,6 +253,7 @@ async def todo(interaction: discord.Interaction):
 async def todo_ping_check():
     if not bot.is_ready():
         return
+
     channel = bot.get_channel(TODO_CHANNEL_ID)
     if not channel:
         return
@@ -214,15 +265,22 @@ async def todo_ping_check():
     for user_id in active_members:
         member = channel.guild.get_member(int(user_id))
 
-        # User left server or is bot
         if not member or member.bot:
             continue
 
         last_time = data.get(str(member.id), 0)
+        elapsed = now - last_time
 
-        if now - last_time >= 86400:  # 24 hours
+        # ⏰ Ping every 1 hour AFTER 24 hours passed
+        if last_time == 0 or elapsed >= 86400:
+            hours_late = elapsed // 3600
+
             await channel.send(
-                f"{member.mention} ⏰ Please submit your `/todo`",
+                content=(
+                    f"{member.mention} ⏰ **TODO Pending**\n"
+                    f"🕒 Last submission: `{hours_late} hour(s) ago`\n"
+                    f"👉 Please submit your `/todo`"
+                ),
                 allowed_mentions=discord.AllowedMentions(users=[member])
             )
 
